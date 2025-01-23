@@ -4,8 +4,46 @@ import pandas as pd
 from collections import Counter
 from collections import defaultdict
 from trim_video import trim_video
+import os
 
+def save_frame_from_video(video_path, output_folder, timestamp, participant_nb, scene_nb):
+    """
+    Saves a frame from the video at a specific timestamp.
 
+    Parameters:
+    - video_path: Path to the video file.
+    - output_folder: Folder to save the extracted frame.
+    - timestamp: Time in seconds from the start to extract the frame.
+    """
+    # Open the video file
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        print("Error: Could not open video.")
+        return
+
+    # Set the frame position at the desired timestamp
+    fps = cap.get(cv2.CAP_PROP_FPS)  # Frames per second
+    frame_position = int(timestamp * fps)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_position)
+
+    # Read the frame
+    ret, frame = cap.read()
+    if ret:
+        # Ensure output folder exists
+        os.makedirs(output_folder, exist_ok=True)
+
+        # Create the output file path
+        output_path = os.path.join(output_folder, f"frame_at_{timestamp}s_{participant_nb}_{scene_nb}.jpg")
+
+        # Save the frame as an image
+        cv2.imwrite(output_path, frame)
+        print(f"Frame saved at: {output_path}")
+    else:
+        print("Error: Could not read the frame.")
+
+    # Release the video capture object
+    cap.release()
 
 def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, lag):
                  
@@ -21,6 +59,7 @@ def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, la
     
     trim_video(video_path, check.iloc[time_partition[1]]["timestamp"] + lag, check.iloc[time_partition[2] - 1]["timestamp"] + lag2)
     out_video_path = "trimmed_video.mp4"
+    save_frame_from_video("trimmed_video.mp4", "frame_check", 5, part_number, scene_nb)
 
 
     fixation_durations = check.groupby('fixation_number').agg(
