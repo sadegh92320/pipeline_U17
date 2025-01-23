@@ -8,8 +8,10 @@ import json
 import math
 from convert_gaze import convert
 from eye_traking_analysis import fixation_AOI
+import pytz
+from lag_video import first_non_zero_speed
 
-folder = "../17August2023"
+folder = r"\Users\Student\Desktop\driving_data_test"
 participants = []
 
 
@@ -25,8 +27,8 @@ class table_participant:
         self.participants_eye = self.get_participants_gaze()
         self.data = {}
         self.pickel = pickel
-        self.info = None #pd.read_excel(participant_info)
-        self.df = None #self.get_df()
+        self.info = pd.read_excel(participant_info)
+        self.df = self.get_df()
         
         self.eye_tracker = None
         self.video = video
@@ -118,6 +120,25 @@ class table_participant:
                     continue
                 
                 time1 = datetime.strptime(dir, "%Y%m%dT%H%M%SZ")
+                
+                gmt = pytz.timezone("GMT")
+                uk_time = pytz.timezone("Europe/London")  # Automatically handles DST
+
+                # Localize the time to GMT
+                time1_gmt = gmt.localize(time1)
+                time1_uk = time1_gmt.astimezone(uk_time)
+
+
+                # Convert to UK time
+                time1 = datetime(
+                        year=time1_uk.year,
+                        month=time1_uk.month,
+                        day=time1_uk.day,
+                        hour=time1_uk.hour,
+                        minute=time1_uk.minute,
+                        second=time1_uk.second
+                    )
+             
             
                 participant_path = os.path.join(root, dir, "meta", "participant")
                 imu_path = os.path.join(root, dir, "imudata.gz")
@@ -128,7 +149,7 @@ class table_participant:
                
                 
                 if os.path.isfile(participant_path):
-                    print(f"Found Participant File: {participant_path}")
+                  
                     with open(participant_path, 'r') as f:
                         data = json.load(f)    
                         number = data['name']
@@ -138,14 +159,17 @@ class table_participant:
             
                 
     def get_particition_video(self):
+        first_scene = [1, 3, 4]
        
         self.participants_eye
         self.participants    
         for eye in self.participants_eye:
             scene = []
             parse_nb = eye[0].split("_")
+            
             filtered_tuples = [t for t in self.participants if int(t[0]) == int(parse_nb[0])]
-            print(len(filtered_tuples))
+          
+            
             seen = set()
             for f1 in reversed(filtered_tuples):
                 if int(f1[2][" SceneNr"][0]) == 0:
@@ -159,9 +183,12 @@ class table_participant:
 
                 end_driving = datetime.strptime(f1[2]["UTC"].iloc[-1], "%Y-%m-%d %H:%M:%S:%f")
                 
-                seconds_to_add = (eye[1]["timestamp"].iloc[-1])
+                seconds_to_add = (eye[2]["timestamp"].iloc[-1])
+            
+                
                 
                 end_eye = eye[3] + timedelta(seconds=seconds_to_add)
+                
 
                 
                 
@@ -170,13 +197,16 @@ class table_participant:
                     seen.add(int(f1[2][" SceneNr"][0]))
                     if start_driving > eye[3] and start_driving < end_eye:
                         scene.append([int(f1[2][" SceneNr"][0]), start_driving, end_driving])
+                        if int(f1[2][" SceneNr"][0]) in first_scene:
+                            eye.append(start_driving)
 
             
             
                 
-            reversed(scene)
-            print(scene)
+            #reversed(scene)
+            
             for s, start, end in scene:
+                                                                                                                                                                       
                 partition_1 = (start - eye[3]).total_seconds()
                 partition_2 = (end - eye[3]).total_seconds()
                 i_1 = 0
@@ -233,16 +263,27 @@ class table_participant:
                 
                 
                 file[' Throttle'] = pd.to_numeric(file[' Throttle'], errors='coerce').fillna(0)
+                throttle_threshold = 0.08
+                consistency_check_window = 5
 
                 non_zero_indices = file[file[' Throttle'] != 0].index
+                non_zero_2 = file[file[' Throttle'] > 0.1].index
+
+                for idx in non_zero_2:
+                    if idx + consistency_check_window - 1 < len(file):  # Ensure we don't exceed the data length
+                        if all(file[' Throttle'][idx:idx + consistency_check_window] > throttle_threshold):
+                            first_non_zero = idx
+                            break  
 
 
-                first_non_zero = non_zero_indices[0]
+                
                 last_non_zero = non_zero_indices[-1]
 
                 
                 trimmed_df = file.iloc[first_non_zero:last_non_zero].reset_index(drop=True)
-                participants.append((part_number, formatted_date, trimmed_df))
+                
+                if not trimmed_df.empty:
+                    participants.append((part_number, formatted_date, trimmed_df))
             except:
                 
                 continue
@@ -407,45 +448,94 @@ class table_participant:
 
 
     def get_df_eye(self):
+        passed_participant = []
         
         for participant in self.participants_eye:
             #num_fix = fixation_AOI(participant[1], participant[3], participant[4:])
             i = 0
             #{'side mirror': 12, 'reer mirror': 5, 'speed': 20}
             #{'side mirror': 0.25712266666666644, 'reer mirror': 0.3686891999999986, 'speed': 0.4989025500000011}
+            if len(participant) < 6:
+                continue
             
             parse_nb = participant[0].split("_")
             
             
-               
-            for fix in participant[5:]:
-            
-                
-                num_fix = fixation_AOI(participant[2], participant[4], fix, int(parse_nb[0]), fix[0])
-                
-                key = (int(parse_nb[0]), fix[0])
-                amplitude = self.saccade_amplitude(participant[2][fix[1]:fix[2]])
-                velocity = self.saccade_velocity(participant[2][fix[1]:fix[2]])
-                duration = self.duration_fixation(participant[2][fix[1]:fix[2]])
-                    
-                    
-                
-                print(num_fix)
-                    
-                self.data_eye[key] = {
-                        'Participant number': int(parse_nb[0]),
-                        'Scenario number': fix[0],
-                        'Saccade amplitude': amplitude,
-                        'Saccade velocity': velocity,
-                        'Duration fixation': duration,
-                        'fixation in side mirror': num_fix[0]["side mirror"],
-                        'fixation in reer mirror': num_fix[0]["reer mirror"],
-                        'fixation in speed': num_fix[0]["speed"],
-                        'duration fixation in side mirror': num_fix[1]["side mirror"],
-                        'duration fixation in reer mirror': num_fix[1]["reer mirror"],
-                        'duration fixation in speed': num_fix[1]["speed"],
+            diff_time = abs(participant[5] - participant[3])
+            if diff_time > timedelta(minutes = 1, seconds = 30):
+                passed_participant.append(int(parse_nb[0]))
+                continue
+           
 
-                    }
+            lag = first_non_zero_speed(participant[4], participant[5], participant[3])
+            
+            for fix in participant[6:]:
+                print((int(parse_nb[0]), fix[0]))
+                if int(fix[0]) == 7 or int(fix[0]) == 6:
+                    half = int((fix[1] + fix[2])/2)
+                    fix_1 = fix[:-1] + [half]  
+                    fix_2 = [fix[0]] + [half] + [fix[2]]
+                    num_fix_1 = num_fix = fixation_AOI(participant[2], participant[4], fix_1, int(parse_nb[0]), fix[0], lag)
+                    num_fix_2 = num_fix = fixation_AOI(participant[2], participant[4], fix_2, int(parse_nb[0]), fix[0], lag)
+                    key = (int(parse_nb[0]), fix[0])
+                    amplitude = self.saccade_amplitude(participant[2][fix[1]:fix[2]])
+                    velocity = self.saccade_velocity(participant[2][fix[1]:fix[2]])
+                    duration = self.duration_fixation(participant[2][fix[1]:fix[2]])
+                    self.data_eye[key] = {
+                            'Participant number': int(parse_nb[0]),
+                            'Scenario number': fix[0],
+                            'Saccade amplitude': amplitude,
+                            'Saccade velocity': velocity,
+                            'Duration fixation': duration,
+                            'fixation in side mirror': num_fix_1[0]["side mirror"] + num_fix_2[0]["side mirror"],
+                            'fixation in rear mirror': num_fix_1[0]["reer mirror"] + num_fix_2[0]["side mirror"],
+                            'fixation in speed': num_fix_1[0]["speed"] + num_fix_2[0]["side mirror"],
+                            'duration fixation in side mirror': num_fix_1[1]["side mirror"] + num_fix_2[0]["side mirror"],
+                            'duration fixation in rear mirror': num_fix_1[1]["reer mirror"] + num_fix_2[0]["side mirror"],
+                            'duration fixation in speed': num_fix_1[1]["speed"] + num_fix_2[0]["side mirror"],
+                            'number speed in view': num_fix_1[2]["speed"] + num_fix_2[0]["side mirror"],
+                            'number rear mirror in view': num_fix_1[2]["reer mirror"] + num_fix_2[0]["side mirror"],
+                            'number side mirror in view': num_fix_1[2]["side mirror"] + num_fix_2[0]["side mirror"],
+
+                        }
+                  
+               
+            
+                else:
+                    
+                    num_fix = fixation_AOI(participant[2], participant[4], fix, int(parse_nb[0]), fix[0], lag)
+                    
+                    key = (int(parse_nb[0]), fix[0])
+                    amplitude = self.saccade_amplitude(participant[2][fix[1]:fix[2]])
+                    velocity = self.saccade_velocity(participant[2][fix[1]:fix[2]])
+                    duration = self.duration_fixation(participant[2][fix[1]:fix[2]])
+                    self.data_eye[key] = {
+                            'Participant number': int(parse_nb[0]),
+                            'Scenario number': fix[0],
+                            'Saccade amplitude': amplitude,
+                            'Saccade velocity': velocity,
+                            'Duration fixation': duration,
+                            'fixation in side mirror': num_fix[0]["side mirror"],
+                            'fixation in rear mirror': num_fix[0]["reer mirror"],
+                            'fixation in speed': num_fix[0]["speed"],
+                            'duration fixation in side mirror': num_fix[1]["side mirror"],
+                            'duration fixation in rear mirror': num_fix[1]["reer mirror"],
+                            'duration fixation in speed': num_fix[1]["speed"],
+                            'number speed in view': num_fix[2]["speed"],
+                            'number rear mirror in view': num_fix[2]["reer mirror"],
+                            'number side mirror in view': num_fix[2]["side mirror"],
+
+                        }
+                        
+                    
+                
+              
+                    
+                    
+            df = pd.DataFrame(self.data_eye.values())
+            df.to_csv('participant_result_eye.csv', index=False)
+            print(passed_participant)
+
                 
             #print(eye_data)
         
@@ -455,6 +545,7 @@ class table_participant:
        
     
         for nb, date, files in self.participants:
+           
             if int(files[" SceneNr"][0]) != 0:
                 
     
@@ -567,10 +658,10 @@ class table_participant:
 
 
 #folder = "Scenarios_Charity/test"
-part_info = "Downloads/participant_info_3.xlsx"
+part_info = "participant_info_3.xlsx"
 #print(convert("../eye_tracking_participant/20241030T091636Z/imudata.gz", "../eye_tracking_participant/20241030T091636Z/gazedata.gz"))
 #pkl_file = "participant_result.pkl"
-t = table_participant(folder, part_info, "../eye_tracking_participant")
+t = table_participant(folder, part_info, r"\Users\Student\Desktop\U17ccetg")
 
 
 #print(t.eye_data)

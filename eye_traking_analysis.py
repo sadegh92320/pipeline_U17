@@ -7,14 +7,19 @@ from trim_video import trim_video
 
 
 
-def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb):
+def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, lag):
                  
     check = eye_data
+    
+    if time_partition[2] == len(check):
+        lag2 = 0
+    else:
+        lag2 = lag
    
     
    
     
-    trim_video(video_path, check.iloc[time_partition[1]]["timestamp"], check.iloc[time_partition[2] - 1]["timestamp"])
+    trim_video(video_path, check.iloc[time_partition[1]]["timestamp"] + lag, check.iloc[time_partition[2] - 1]["timestamp"] + lag2)
     out_video_path = "trimmed_video.mp4"
 
 
@@ -37,6 +42,7 @@ def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb):
     results = model(out_video_path, show=False, save=False)
 
     count = 0
+    number_view = {"side mirror": 0, "reer mirror": 0, "speed": 0}
 
     eye_dict = {"side mirror": 0, "reer mirror": 0, "speed": 0}
     conversion = {0: "speed", 1: "reer mirror", 2: "side mirror"}
@@ -73,8 +79,21 @@ def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb):
         p = 0
         
         for box in frame_results.boxes:
+            
             x_min, y_min, x_max, y_max = box.xyxy[0]  
             cls = box.cls[0]  
+            if int(cls.item()) == 0:
+                number_view["speed"] += 1
+                
+        
+            if int(cls.item()) == 1:
+                number_view["reer mirror"] += 1 
+                
+               
+            if int(cls.item()) == 2:
+                number_view["side mirror"] += 1
+                
+                
             result["time"].append(timestamp)
             result["class"].append(int(cls.item()))
             result["AOI"].append(conversion[int(cls.item())])
@@ -170,7 +189,7 @@ def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb):
     filename = f"{part_number}_{scene_nb}_fixation_AOI.csv"
     df.to_csv(f"fixation_results/{filename}", index=False)
     
-    return (eye_dict, class_averages)
+    return (eye_dict, class_averages, number_view)
     
 
 
