@@ -10,8 +10,11 @@ from convert_gaze import convert
 from eye_traking_analysis import fixation_AOI
 import pytz
 from lag_video import first_non_zero_speed
+from get_position_driving_data import add_spawn
 
-folder = r"\Users\Student\Desktop\driving_data_test"
+#folder = r"\Users\Student\Desktop\driving_data_test"
+#J'ai fait le 12 Avril
+folder = "/Users/sadeghemami/U17CC_Malvern202410"
 participants = []
 
 
@@ -19,7 +22,7 @@ participants = []
         
     
 class table_participant:
-    def __init__(self, folder, participant_info, folder_eye, video = None, pickel = None):
+    def __init__(self, folder, participant_info, folder_eye, pickel = None):
         self.f = folder
         self.data_eye = {}
         self.eye_data = folder_eye
@@ -31,7 +34,7 @@ class table_participant:
         self.df = self.get_df()
         
         self.eye_tracker = None
-        self.video = video
+       
     
     
     
@@ -146,6 +149,11 @@ class table_participant:
                 video = os.path.join(root, dir, "scenevideo.mp4")
                
                 data_eye = convert(imu_path, gaze_path)
+                eye_tracker_data = data_eye.loc[data_eye['label'] == "eye tracker"].reset_index(drop=True)
+                
+                if int(eye_tracker_data["timestamp"][0]) > 1:
+                    eye_tracker_data["timestamp"] = eye_tracker_data["timestamp"] - eye_tracker_data["timestamp"][0]
+                print(eye_tracker_data["timestamp"][0])
                
                 
                 if os.path.isfile(participant_path):
@@ -153,7 +161,7 @@ class table_participant:
                     with open(participant_path, 'r') as f:
                         data = json.load(f)    
                         number = data['name']
-                participants_eye.append([number, data_eye, data_eye.loc[data_eye['label'] == "eye tracker"].reset_index(drop=True), time1, video])
+                participants_eye.append([number, data_eye, eye_tracker_data, time1, video])
         
         return participants_eye
             
@@ -167,13 +175,21 @@ class table_participant:
             scene = []
             parse_nb = eye[0].split("_")
             
+            
             filtered_tuples = [t for t in self.participants if int(t[0]) == int(parse_nb[0])]
+            
+            
+            
           
             
             seen = set()
             for f1 in reversed(filtered_tuples):
+                
                 if int(f1[2][" SceneNr"][0]) == 0:
                     continue
+                print("time")
+                print(int(f1[2][" SceneNr"][0]))
+
                 
                 
                 
@@ -184,10 +200,14 @@ class table_participant:
                 end_driving = datetime.strptime(f1[2]["UTC"].iloc[-1], "%Y-%m-%d %H:%M:%S:%f")
                 
                 seconds_to_add = (eye[2]["timestamp"].iloc[-1])
+                print(start_driving)
+                print(end_driving)
+                
             
                 
                 
                 end_eye = eye[3] + timedelta(seconds=seconds_to_add)
+                print(end_eye)
                 
 
                 
@@ -197,18 +217,26 @@ class table_participant:
                     seen.add(int(f1[2][" SceneNr"][0]))
                     if start_driving > eye[3] and start_driving < end_eye:
                         scene.append([int(f1[2][" SceneNr"][0]), start_driving, end_driving])
-                        if int(f1[2][" SceneNr"][0]) in first_scene:
-                            eye.append(start_driving)
+                if start_driving > eye[3] and start_driving < end_eye:
+                    if int(f1[2][" SceneNr"][0]) in first_scene:
+                    
+                        first_time = start_driving
+                
 
             
             
                 
-            #reversed(scene)
+            
+            eye.append(first_time)
+            print(scene)
             
             for s, start, end in scene:
                                                                                                                                                                        
                 partition_1 = (start - eye[3]).total_seconds()
                 partition_2 = (end - eye[3]).total_seconds()
+                print(s)
+                print(partition_1)
+                print(partition_2)
                 i_1 = 0
                 i_2 = 0 
 
@@ -224,6 +252,7 @@ class table_participant:
 
                 if i_2 == 0:
                     i_2 = len(eye[2])
+                print([s, i_1, i_2])
                     
                 eye.append([s, i_1, i_2])
                         
@@ -251,15 +280,33 @@ class table_participant:
                 
                 file = pd.read_csv(f)
                 part_number_set = set()
+                spawn_indice = 0
 
                 if ' PedSpawned' in file.columns and ' CarSpawned' in file.columns:
                     
                     condition = (file[' CarSpawned'] == " True") | (file[' PedSpawned'] == " True")
                     
                     true_indices = file.index[condition].tolist()
-                if true_indices:  # Only add if condition is met
+                    if len(true_indices) >0:
+                        spawn_indice = true_indices[0] + 86
+                    else:
+                        spawn_indice = add_spawn(file)
+                else:
+                    file[' PedSpawned'] = "False"
+                    file[' CarSpawned'] = "False"
+                    spawn_indice = add_spawn(file)
+
+                collision = 0
+                if ' CollidedWithTarget' in file.columns:
                     
-                    part_number_set.add(part_number)
+                    condition = (file[' CollidedWithTarget'] == " True")
+                   
+                    true_indices = file.index[condition].tolist()
+                    if len(true_indices) > 0:
+                        collision = true_indices[0] + 53
+                else:
+                    file[' CollidedWithTarget'] = "False"
+                       
                 
                 
                 file[' Throttle'] = pd.to_numeric(file[' Throttle'], errors='coerce').fillna(0)
@@ -278,9 +325,16 @@ class table_participant:
 
                 
                 last_non_zero = non_zero_indices[-1]
-
                 
-                trimmed_df = file.iloc[first_non_zero:last_non_zero].reset_index(drop=True)
+                if collision != 0:
+                    
+                    trimmed_df = file.iloc[first_non_zero:collision].reset_index(drop=True)
+                    
+                elif spawn_indice != 0:
+                    trimmed_df = file.iloc[first_non_zero:spawn_indice].reset_index(drop=True)
+
+                else:
+                    trimmed_df = file.iloc[first_non_zero:last_non_zero].reset_index(drop=True)
                 
                 if not trimmed_df.empty:
                     participants.append((part_number, formatted_date, trimmed_df))
@@ -451,6 +505,7 @@ class table_participant:
         passed_participant = []
         
         for participant in self.participants_eye:
+            print(participant)
             #num_fix = fixation_AOI(participant[1], participant[3], participant[4:])
             i = 0
             #{'side mirror': 12, 'reer mirror': 5, 'speed': 20}
@@ -463,6 +518,9 @@ class table_participant:
             
             diff_time = abs(participant[5] - participant[3])
             if diff_time > timedelta(minutes = 1, seconds = 30):
+                print(participant[5])
+                print(participant[3])
+                print(diff_time)
                 passed_participant.append(int(parse_nb[0]))
                 continue
            
@@ -470,6 +528,9 @@ class table_participant:
             lag = first_non_zero_speed(participant[4], participant[5], participant[3])
             
             for fix in participant[6:]:
+                if int(fix[0]) == 7 or int(fix[0]) == 6 or int(fix[0]) == 2:
+                    continue
+                
                 print((int(parse_nb[0]), fix[0]))
                 if int(fix[0]) == 7 or int(fix[0]) == 6:
                     half = int((fix[1] + fix[2])/2)
@@ -543,24 +604,32 @@ class table_participant:
     def get_df(self):
         # Loop through your data and build the rows
        
-    
+        
         for nb, date, files in self.participants:
+            
            
             if int(files[" SceneNr"][0]) != 0:
+               
                 
     
                 
                 
                 key = (nb, int(files[" SceneNr"][0]))  # Unique key based on participant and scenario number
+               
                 if key in self.data and self.data[key]["Date"] > date:
-                    pass
-                else:
-                    continue 
+                    continue
+                
                
                 
                 age = self.info.loc[(self.info['Participant number ']) == int(nb), 'Age']
                 gender = self.info.loc[(self.info['Participant number ']) == int(nb), 'Gender']
                 event = self.info.loc[(self.info['Participant number ']) == int(nb), 'How many events have you attended']
+                if " CollidedWithBystander" in files.columns:
+                    number_of_collision = files[" CollidedWithBystander"].iloc[-2]
+                else:
+                    
+                    number_of_collision = "NA"
+                has_collided = files[" CollidedWithTarget"].iloc[-2]
                
                 
                
@@ -608,6 +677,8 @@ class table_participant:
                 
 
                 
+                if (gender.tolist())[0] != "Male" or (gender.tolist())[0] != "Female":
+                    print((gender.tolist())[0])
                 
                 self.data[key] = {
                         'Date': date,
@@ -621,6 +692,8 @@ class table_participant:
                         'max decceleration': self.get_max_min_acceleration(files)[1],
                         'max acceleration': self.get_max_min_acceleration(files)[0],
                         'reaction time': self.get_reaction_time(files),
+                        'Collided during scenario': has_collided,
+                        'Number of Collision': number_of_collision,
                         'speed of accident': self.get_accident_speed(files),
                         'Age': age,
                         'Gender': (gender.tolist())[0],
@@ -661,17 +734,19 @@ class table_participant:
 part_info = "participant_info_3.xlsx"
 #print(convert("../eye_tracking_participant/20241030T091636Z/imudata.gz", "../eye_tracking_participant/20241030T091636Z/gazedata.gz"))
 #pkl_file = "participant_result.pkl"
-t = table_participant(folder, part_info, r"\Users\Student\Desktop\U17ccetg")
-
+t = table_participant(folder, part_info, "/Users/sadeghemami/eye_tracking_participant", pickel="participant_result.pkl")
+#pickel="participant_result.pkl"
+#r"\Users\Student\Desktop\U17ccetg"
 
 #print(t.eye_data)
-(t.get_particition_video())
+#(t.get_particition_video())
 #print(t.participants_eye)
-t.get_df_eye()
+#t.get_df_eye()
 #(t.get_particition_video())
 #print(t.data_eye)
 #t.saccade_velocity()
 #print(t.df.shape)
 
 #t.generate_csv() 
-#t.generate_pickle()
+t.generate_pickle()
+t.generate_csv()

@@ -54,6 +54,7 @@ def first_non_zero_speed(video_path, start_1, time_eye):
     #    print("The time difference is within 1 minute 30 seconds.")
     #else:
     #    print("The time difference exceeds 1 minute 30 seconds.")
+    acceptable = [1, 2, 3, 4, 5, 6, 7]
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -89,9 +90,12 @@ def first_non_zero_speed(video_path, start_1, time_eye):
 
                     
                     detected_number = read_text_from_roi(roi)
+                    print(detected_number)
                     if detected_number is not None:
                         
-                        if int(detected_number):
+                        if int(detected_number) in acceptable:
+                            print("time")
+                            print(timestamp)
                             
                             time = time_eye + timedelta(seconds=timestamp)
                             diff = time - start_1
