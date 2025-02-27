@@ -13,6 +13,7 @@ import pandas as pd
 
 def add_spawn(df):
     scene_nb = int(df[" SceneNr"][0])
+    df[' Time'] = pd.to_numeric(df[' Time'], errors='coerce')
     df[' Time'] = df[' Time'] - df[' Time'].iloc[0]  # Subtract the first time value
 
     # Calculate time difference (delta_time)
