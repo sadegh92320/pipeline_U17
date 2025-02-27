@@ -19,8 +19,13 @@ def add_spawn(df):
     df['delta_time'] = df[' Time'].diff().fillna(0)  # First value is zero
 
     # Calculate position based on velocity and delta_time
+    df[' Velocity z'] = pd.to_numeric(df[' Velocity z'], errors='coerce')
+    df[' Velocity x'] = pd.to_numeric(df[' Velocity x'], errors='coerce')
+    df[' Velocity y'] = pd.to_numeric(df[' Velocity y'], errors='coerce')
     df['pos x'] = (df[' Velocity x'] * df['delta_time']).cumsum()
     df['pos y'] = (df[' Velocity y'] * df['delta_time']).cumsum()
+    
+    
     df['pos z'] = (df[' Velocity z'] * df['delta_time']).cumsum()
     spawn_index = 0
 

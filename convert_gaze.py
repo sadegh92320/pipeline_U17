@@ -166,7 +166,6 @@ def convert(imu, gaze):
 
     return combined_df
 
-#convert(
-#    "../eye_tracking_participant/20241030T091636Z/imudata.gz",
-#    "../eye_tracking_participant/20241030T091636Z/gazedata.gz"
+##convert(
+#   "/Users/sadeghemami/eye_tracking_participant/20230221T132243Z/imudata.gz",  "/Users/sadeghemami/eye_tracking_participant/20230221T132243Z/gazedata.gz"
 #)
