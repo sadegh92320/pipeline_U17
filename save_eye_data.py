@@ -3,6 +3,7 @@ import os
 import json
 import pytz
 from datetime import datetime
+from convert_gaze import convert
 
 def get_participants_gaze(eye_data, save_path="participants_eye.pkl"):
     participants_eye = []
