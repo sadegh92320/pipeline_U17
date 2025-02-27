@@ -11,10 +11,13 @@ from eye_traking_analysis import fixation_AOI
 import pytz
 from lag_video import first_non_zero_speed
 from get_position_driving_data import add_spawn
+import numpy as np
+from get_scene_2 import get_video_darkening_times
+import traceback
 
 #folder = r"\Users\Student\Desktop\driving_data_test"
 #J'ai fait le 12 Avril
-folder = "/Users/sadeghemami/U17CC_Malvern202410"
+folder = "/Users/sadeghemami/21Feb2023"
 participants = []
 
 
@@ -26,12 +29,14 @@ class table_participant:
         self.f = folder
         self.data_eye = {}
         self.eye_data = folder_eye
+        self.scene_2 = {}
         self.participants = self.get_participants()
         self.participants_eye = self.get_participants_gaze()
         self.data = {}
         self.pickel = pickel
         self.info = pd.read_excel(participant_info)
-        self.df = self.get_df()
+        self.df = None #self.get_df()
+        
         
         self.eye_tracker = None
        
@@ -147,13 +152,16 @@ class table_participant:
                 imu_path = os.path.join(root, dir, "imudata.gz")
                 gaze_path = os.path.join(root, dir, "gazedata.gz")
                 video = os.path.join(root, dir, "scenevideo.mp4")
-               
-                data_eye = convert(imu_path, gaze_path)
+                try:
+                    data_eye = convert(imu_path, gaze_path)
+                except:
+                    print(participant_path)
+                    continue
                 eye_tracker_data = data_eye.loc[data_eye['label'] == "eye tracker"].reset_index(drop=True)
                 
                 if int(eye_tracker_data["timestamp"][0]) > 1:
                     eye_tracker_data["timestamp"] = eye_tracker_data["timestamp"] - eye_tracker_data["timestamp"][0]
-                print(eye_tracker_data["timestamp"][0])
+              
                
                 
                 if os.path.isfile(participant_path):
@@ -167,76 +175,117 @@ class table_participant:
             
                 
     def get_particition_video(self):
-        first_scene = [1, 3, 4]
+        first_scene = [3, 4]
        
-        self.participants_eye
-        self.participants    
-        for eye in self.participants_eye:
+        
+        for eye in self.participants_eye[:]:
             scene = []
             parse_nb = eye[0].split("_")
             
             
             filtered_tuples = [t for t in self.participants if int(t[0]) == int(parse_nb[0])]
             
-            
-            
+                  
           
             
             seen = set()
-            for f1 in reversed(filtered_tuples):
+            print(eye[0])
+            lag = 0
+            
+           
+            for f1 in (filtered_tuples):
+                print("jjeke")
+                print(len(filtered_tuples))
+                print("scene")
+                print(int(f1[2][" SceneNr"][0]))
+                
+               
                 
                 if int(f1[2][" SceneNr"][0]) == 0:
-                    continue
-                print("time")
-                print(int(f1[2][" SceneNr"][0]))
+                    continue      
+                
+               
+                start_driving = datetime.strptime(f1[2]["UTC"][0], "%Y-%m-%d %H:%M:%S:%f")
+                print(start_driving)
+
+                end_driving = datetime.strptime(f1[2]["UTC"].iloc[-2], "%Y-%m-%d %H:%M:%S:%f")
+                
+                seconds_to_add = (eye[2]["timestamp"].iloc[-1])
+                
+                end_eye = eye[3] + timedelta(seconds=seconds_to_add)
+        
 
                 
+                if start_driving > eye[3] and start_driving < end_eye:
+                    if int(f1[2][" SceneNr"][0]) == 2:
+                        first_time = datetime.strptime(self.scene_2[int(parse_nb[0])][0], "%Y-%m-%d %H:%M:%S:%f")
+                        lag = get_video_darkening_times(eye[4], first_time, eye[3])
+                        eye.append(lag)
+                        beginning_eye = eye[3] - timedelta(seconds=lag[0])
+                        end_eye =end_eye - timedelta(seconds = lag[0])
+                        break
+
+                    if int(f1[2][" SceneNr"][0]) in first_scene:
+                        print("laagag")
+                        print(int(f1[2][" SceneNr"][0]))
+                    
+                        first_time = start_driving
+                        
+                        lag = first_non_zero_speed(eye[4], first_time, eye[3])
+                        print(first_time)
+                        print(eye[3])
+                        print(lag)
+                        eye.append(lag)
+                        beginning_eye = eye[3] - timedelta(seconds=lag[0])
+                        print(beginning_eye)
+                        end_eye =end_eye - timedelta(seconds = lag[0])
+                        print(end_eye)
+                        
+                        break
+            if lag == 0:
+                with open("error_participant.txt", "a") as outfile:  # Open file in append mode
+                    outfile.write(f"{eye[0]}\n")
+                self.participants_eye.remove(eye)
+            for f1 in reversed(filtered_tuples):
+               
                 
-                
+                if int(f1[2][" SceneNr"][0]) == 0:
+                    continue      
                 
                
                 start_driving = datetime.strptime(f1[2]["UTC"][0], "%Y-%m-%d %H:%M:%S:%f")
 
-                end_driving = datetime.strptime(f1[2]["UTC"].iloc[-1], "%Y-%m-%d %H:%M:%S:%f")
-                
-                seconds_to_add = (eye[2]["timestamp"].iloc[-1])
-                print(start_driving)
-                print(end_driving)
-                
-            
-                
-                
-                end_eye = eye[3] + timedelta(seconds=seconds_to_add)
-                print(end_eye)
-                
-
-                
-                
+                end_driving = datetime.strptime(f1[2]["UTC"].iloc[-2], "%Y-%m-%d %H:%M:%S:%f")   
                 if int(f1[2][" SceneNr"][0]) not in seen:
                    
                     seen.add(int(f1[2][" SceneNr"][0]))
-                    if start_driving > eye[3] and start_driving < end_eye:
+                    print(int(f1[2][" SceneNr"][0]))
+                    print(start_driving)
+                    difference = abs(start_driving - end_eye)
+
+                    if start_driving > beginning_eye and start_driving < end_eye and difference > timedelta(seconds=15):
+                        print(int(f1[2][" SceneNr"][0]))
                         scene.append([int(f1[2][" SceneNr"][0]), start_driving, end_driving])
-                if start_driving > eye[3] and start_driving < end_eye:
-                    if int(f1[2][" SceneNr"][0]) in first_scene:
-                    
-                        first_time = start_driving
-                
 
             
-            
-                
-            
-            eye.append(first_time)
+            print("sssss")
+            print(len(scene))
             print(scene)
             
+            
+          
+            
             for s, start, end in scene:
+                
                                                                                                                                                                        
-                partition_1 = (start - eye[3]).total_seconds()
-                partition_2 = (end - eye[3]).total_seconds()
-                print(s)
+                partition_1 = (start - beginning_eye).total_seconds()
+                partition_2 = (end - beginning_eye).total_seconds()
+                partition_2 = partition_2 
+                print((start-end).total_seconds())
+                print("partition")
                 print(partition_1)
                 print(partition_2)
+                
                 i_1 = 0
                 i_2 = 0 
 
@@ -252,9 +301,10 @@ class table_participant:
 
                 if i_2 == 0:
                     i_2 = len(eye[2])
-                print([s, i_1, i_2])
+               
                     
                 eye.append([s, i_1, i_2])
+                
                         
                 
         
@@ -279,8 +329,16 @@ class table_participant:
             try:
                 
                 file = pd.read_csv(f)
+                if int(file[" SceneNr"][0]) == 2:
+                   
+                    try: 
+                        self.scene_2[part_number].append(file["UTC"][0])
+                    except:
+
+                        self.scene_2[part_number] = [file["UTC"][0]]
                 part_number_set = set()
                 spawn_indice = 0
+            
 
                 if ' PedSpawned' in file.columns and ' CarSpawned' in file.columns:
                     
@@ -288,9 +346,17 @@ class table_participant:
                     
                     true_indices = file.index[condition].tolist()
                     if len(true_indices) >0:
-                        spawn_indice = true_indices[0] + 86
+                        spawn_indice = true_indices[0] + 110
                     else:
-                        spawn_indice = add_spawn(file)
+                        try:
+                            spawn_indice = add_spawn(file)
+                        except:
+                            print(part_number)
+                            print(file[" SceneNr"][0])
+                            traceback.print_exc()
+
+                            
+
                 else:
                     file[' PedSpawned'] = "False"
                     file[' CarSpawned'] = "False"
@@ -323,14 +389,18 @@ class table_participant:
                             break  
 
 
-                
-                last_non_zero = non_zero_indices[-1]
+                try:
+                    last_non_zero = non_zero_indices[-1]
+                except:
+                    print(part_number)
+                    print(file[" SceneNr"][0])
+              
                 
                 if collision != 0:
                     
                     trimmed_df = file.iloc[first_non_zero:collision].reset_index(drop=True)
                     
-                elif spawn_indice != 0:
+                elif spawn_indice != 0 and not np.isnan(spawn_indice):
                     trimmed_df = file.iloc[first_non_zero:spawn_indice].reset_index(drop=True)
 
                 else:
@@ -338,7 +408,11 @@ class table_participant:
                 
                 if not trimmed_df.empty:
                     participants.append((part_number, formatted_date, trimmed_df))
-            except:
+            except Exception as e:
+                
+                traceback.print_exc()
+
+                print(e)
                 
                 continue
         print(len(part_number_set))
@@ -456,7 +530,8 @@ class table_participant:
             t_ped = t_ped.iloc[0]
             start_i = f[f[' PedSpawned'].str.strip() == "True"].index[0]
             sub_df = f.loc[start_i:]
-            sub_df[' Brake'] = pd.to_numeric(sub_df[' Brake'], errors='coerce').fillna(0)
+            sub_df.loc[:, ' Brake'] = pd.to_numeric(sub_df[' Brake'], errors='coerce').fillna(0)
+
             t_brake = sub_df.loc[sub_df[' Brake'] > 0, " Time"]     
             if len(t_brake) > 1:
                 if len(t_collision) > 0 and t_collision.iloc[0] > t_brake.iloc[0]:
@@ -505,7 +580,7 @@ class table_participant:
         passed_participant = []
         
         for participant in self.participants_eye:
-            print(participant)
+            
             #num_fix = fixation_AOI(participant[1], participant[3], participant[4:])
             i = 0
             #{'side mirror': 12, 'reer mirror': 5, 'speed': 20}
@@ -516,28 +591,31 @@ class table_participant:
             parse_nb = participant[0].split("_")
             
             
-            diff_time = abs(participant[5] - participant[3])
-            if diff_time > timedelta(minutes = 1, seconds = 30):
-                print(participant[5])
-                print(participant[3])
-                print(diff_time)
-                passed_participant.append(int(parse_nb[0]))
-                continue
+            #diff_time = abs(participant[5] - participant[3])
+            #if diff_time > timedelta(minutes = 1, seconds = 30):
+                #print("passed as the ")
+               
+                #passed_participant.append(int(parse_nb[0]))
+                #continue
            
 
-            lag = first_non_zero_speed(participant[4], participant[5], participant[3])
-            
+            #lag = first_non_zero_speed(participant[4], participant[5], participant[3])
+            first = [1, 2, 7, 6]
             for fix in participant[6:]:
-                if int(fix[0]) == 7 or int(fix[0]) == 6 or int(fix[0]) == 2:
+                print(int(fix[0]))
+                print(int(parse_nb[0]))
+                if int(fix[0]) in first:
                     continue
                 
-                print((int(parse_nb[0]), fix[0]))
+                
+               
                 if int(fix[0]) == 7 or int(fix[0]) == 6:
+                   
                     half = int((fix[1] + fix[2])/2)
                     fix_1 = fix[:-1] + [half]  
                     fix_2 = [fix[0]] + [half] + [fix[2]]
-                    num_fix_1 = num_fix = fixation_AOI(participant[2], participant[4], fix_1, int(parse_nb[0]), fix[0], lag)
-                    num_fix_2 = num_fix = fixation_AOI(participant[2], participant[4], fix_2, int(parse_nb[0]), fix[0], lag)
+                    num_fix_1 =  fixation_AOI(participant[2], participant[4], fix_1, int(parse_nb[0]), fix[0], participant[5])
+                    num_fix_2 =  fixation_AOI(participant[2], participant[4], fix_2, int(parse_nb[0]), fix[0], participant[5], 2)
                     key = (int(parse_nb[0]), fix[0])
                     amplitude = self.saccade_amplitude(participant[2][fix[1]:fix[2]])
                     velocity = self.saccade_velocity(participant[2][fix[1]:fix[2]])
@@ -564,9 +642,12 @@ class table_participant:
             
                 else:
                     
-                    num_fix = fixation_AOI(participant[2], participant[4], fix, int(parse_nb[0]), fix[0], lag)
+                    
+                    num_fix = fixation_AOI(participant[2], participant[4], fix, int(parse_nb[0]), fix[0], participant[5][1])
                     
                     key = (int(parse_nb[0]), fix[0])
+                    print(fix[1])
+                    print(fix[2])
                     amplitude = self.saccade_amplitude(participant[2][fix[1]:fix[2]])
                     velocity = self.saccade_velocity(participant[2][fix[1]:fix[2]])
                     duration = self.duration_fixation(participant[2][fix[1]:fix[2]])
@@ -594,8 +675,9 @@ class table_participant:
                     
                     
             df = pd.DataFrame(self.data_eye.values())
-            df.to_csv('participant_result_eye.csv', index=False)
-            print(passed_participant)
+
+            df.to_csv('participant_result_eye.csv', mode='a', index=False, header=False)
+            
 
                 
             #print(eye_data)
@@ -608,12 +690,7 @@ class table_participant:
         for nb, date, files in self.participants:
             
            
-            if int(files[" SceneNr"][0]) != 0:
-               
-                
-    
-                
-                
+            if int(files[" SceneNr"][0]) != 0:           
                 key = (nb, int(files[" SceneNr"][0]))  # Unique key based on participant and scenario number
                
                 if key in self.data and self.data[key]["Date"] > date:
@@ -630,6 +707,10 @@ class table_participant:
                     
                     number_of_collision = "NA"
                 has_collided = files[" CollidedWithTarget"].iloc[-2]
+                #files['total_velocity'] = np.sqrt(files[' Velocity x']**2 + files[' Velocity y']**2 + files[' Velocity z']**2)
+
+                # Compute standard deviation of total velocity
+                #std_dev = files['total_velocity'].std()
                
                 
                
@@ -687,6 +768,7 @@ class table_participant:
                         'number of steering': self.get_steering(files),
                         'number of braking': self.get_brake(files),
                         'average velocity': self.get_velocity(files),
+                        #'standard deviation velocity': std_dev,
                         'steering velocity': self.get_steer_velocity(files),
                         'max steering angle': self.get_max_steer_angle(files),
                         'max decceleration': self.get_max_min_acceleration(files)[1],
@@ -734,19 +816,19 @@ class table_participant:
 part_info = "participant_info_3.xlsx"
 #print(convert("../eye_tracking_participant/20241030T091636Z/imudata.gz", "../eye_tracking_participant/20241030T091636Z/gazedata.gz"))
 #pkl_file = "participant_result.pkl"
-t = table_participant(folder, part_info, "/Users/sadeghemami/eye_tracking_participant", pickel="participant_result.pkl")
+t = table_participant(folder, part_info, "/Users/sadeghemami/eye_tracking_participant")
 #pickel="participant_result.pkl"
 #r"\Users\Student\Desktop\U17ccetg"
 
 #print(t.eye_data)
-#(t.get_particition_video())
+(t.get_particition_video())
 #print(t.participants_eye)
-#t.get_df_eye()
+t.get_df_eye()
 #(t.get_particition_video())
 #print(t.data_eye)
 #t.saccade_velocity()
 #print(t.df.shape)
 
 #t.generate_csv() 
-t.generate_pickle()
-t.generate_csv()
+#t.generate_pickle()
+#t.generate_csv()
