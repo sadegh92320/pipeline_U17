@@ -45,7 +45,7 @@ def save_frame_from_video(video_path, output_folder, timestamp, participant_nb, 
     # Release the video capture object
     cap.release()
 
-def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, lag):
+def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, lag, number = None):
                  
     check = eye_data
     
@@ -55,10 +55,8 @@ def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, la
         lag2 = lag
     
     print("trimming")
-    print(lag)
-    print(check.iloc[time_partition[1]]["timestamp"] + lag)
-    print(check.iloc[time_partition[2] - 1]["timestamp"] + lag2)
-    trim_video(video_path, check.iloc[time_partition[1]]["timestamp"] + lag, check.iloc[time_partition[2] - 1]["timestamp"] + lag2)
+    
+    trim_video(video_path, check.iloc[time_partition[1]]["timestamp"], check.iloc[time_partition[2] - 1]["timestamp"])
     out_video_path = "trimmed_video.mp4"
     save_frame_from_video("trimmed_video.mp4", "frame_check", 5, part_number, scene_nb)
 
@@ -226,7 +224,10 @@ def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, la
     df = pd.DataFrame(result)
 
     # Save DataFrame to CSV
-    filename = f"{part_number}_{scene_nb}_fixation_AOI.csv"
+    if number == 2:
+        filename = f"{part_number}_{scene_nb}_fixation_AOI.csv"
+    else:
+        filename = f"{part_number}_{scene_nb}_{number}_fixation_AOI.csv"
     df.to_csv(f"fixation_results/{filename}", index=False)
     
     return (eye_dict, class_averages, number_view)
