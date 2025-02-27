@@ -578,6 +578,7 @@ class table_participant:
 
     def get_df_eye(self):
         passed_participant = []
+        df = pd.DataFrame(self.data_eye.values())
         
         for participant in self.participants_eye:
             
@@ -600,12 +601,11 @@ class table_participant:
            
 
             #lag = first_non_zero_speed(participant[4], participant[5], participant[3])
-            first = [1, 2, 7, 6]
+            new_data = []
             for fix in participant[6:]:
                 print(int(fix[0]))
                 print(int(parse_nb[0]))
-                if int(fix[0]) in first:
-                    continue
+                
                 
                 
                
@@ -668,20 +668,13 @@ class table_participant:
                             'number side mirror in view': num_fix[2]["side mirror"],
 
                         }
-                        
-                    
-                
-              
-                    
-                    
-            df = pd.DataFrame(self.data_eye.values())
+                new_data.append(self.data_eye[key])
 
-            df.to_csv('participant_result_eye.csv', mode='a', index=False, header=False)
-            
-
-                
-            #print(eye_data)
         
+            df = pd.DataFrame(new_data)
+
+            df.to_csv('participant_result_eye.csv', mode='a', index=False, header=not os.path.isfile('participant_result_eye.csv'))
+                        
 
     def get_df(self):
         # Loop through your data and build the rows
