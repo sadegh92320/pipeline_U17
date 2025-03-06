@@ -2,7 +2,9 @@ import cv2
 import numpy as np
 from datetime import datetime, timedelta
 
-def get_video_darkening_times(video_path, start_1, time_eye, threshold=10):
+#start_1, time_eye,
+
+def get_video_darkening_times(video_path, start_1, time_eye, threshold=5):
     """
     Analyzes a video and finds timestamps where the overall brightness significantly decreases.
     
@@ -40,8 +42,10 @@ def get_video_darkening_times(video_path, start_1, time_eye, threshold=10):
     darkening_times = []
     for i in range(1, len(brightness_values)):
         change = (brightness_values[i] - brightness_values[i - 1]) / brightness_values[i - 1] * 100
-        if change < -threshold and timestamps[i] > 180:  # Significant decrease
+        if change < -threshold and timestamps[i] > 60:  # Significant decrease
             timestamp = timestamps[i]
+            print(timestamp)
+            
             event_time = time_eye + timedelta(seconds=timestamp)
             diff = event_time - start_1
             seconds_difference = diff.total_seconds()
@@ -51,3 +55,4 @@ def get_video_darkening_times(video_path, start_1, time_eye, threshold=10):
 
 # Example usage
 
+#get_video_darkening_times("/Users/sadeghemami/eye_tracking_participant/20230815T095017Z/scenevideo.mp4")
