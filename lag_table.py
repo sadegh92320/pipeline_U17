@@ -3,7 +3,12 @@ from datetime import datetime, timedelta
 from lag_video import first_non_zero_speed
 import pandas as pd
 from get_scene_2 import get_video_darkening_times
+import os
 
+
+s_to_check = []
+
+csv_filename = "new_trim.csv"
 
 four_scene = [6, 34, 42, 47, 50, 53, 100, 113, 128, 131, 133, 147, 158, 159,
               161, 179, 183, 185, 219, 230, 253, 277, 340] 
@@ -94,6 +99,8 @@ for key in (participant):
                 break
         if lag == 0 or lag[1] == None:
             passed.append(eye[0])
+            with open("error_participant.txt", "a") as outfile:  # Open file in append mode
+                    outfile.write(f"{eye[0]}\n")
             continue
         else:
             beginning_eye = eye[3] - timedelta(seconds=lag[0])
@@ -101,21 +108,24 @@ for key in (participant):
 
 
                 
-        for f1 in reversed(filtered_tuples):
+        for f1 in (filtered_tuples):
                 
             start_in = False
             end_in = False
             scenario = (f1[2][" SceneNr"][0])
+            s_to_check.append(scenario)
+
             start_driving = datetime.strptime(f1[2]["UTC"][0], "%Y-%m-%d %H:%M:%S:%f")
             end_driving = datetime.strptime(f1[2]["UTC"].iloc[-2], "%Y-%m-%d %H:%M:%S:%f")
             print(lag)
             start_vid = lag[1]
             end_vid = (end_driving - start_driving).total_seconds() + lag[1]
 
-            difference = abs(start_driving - end_eye)
+            difference = abs(start_driving - new_end_eye)
             if start_driving > beginning_eye and start_driving < new_end_eye and difference > timedelta(seconds=15):
                 start_in = True
-            if end_driving < (new_end_eye + timedelta(seconds=15)):
+            
+            if end_driving > beginning_eye and end_driving < (new_end_eye + timedelta(seconds=15)):
                 end_in = True
 
                 
@@ -134,6 +144,25 @@ for key in (participant):
                                                        "end in": end_in,
 
                                                        }
+            
+            new_row = pd.DataFrame([{
+                        "participant number": parse_nb[0],
+                        "Scenario number": scenario,
+                        "start drive": start_driving,
+                        "end drive": end_driving,
+                        "initial start eye": eye[3],
+                        "initial end eye": end_eye,
+                        "lag": lag[0],
+                        "new start eye": beginning_eye,
+                        "new end eye": new_end_eye,
+                        "star video": start_vid,
+                        "end video": end_vid,
+                        "start in": start_in,
+                        "end in": end_in
+                    }])
+
+
+            new_row.to_csv(csv_filename, mode='a', header=not os.path.exists(csv_filename), index=False)
 
 
                 
@@ -145,3 +174,5 @@ df.reset_index(drop=True, inplace=True)
 # Save to CSV
 csv_filename = "trimming.csv"
 df.to_csv(csv_filename, index=False)
+
+print(s_to_check)
