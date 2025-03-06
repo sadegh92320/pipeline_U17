@@ -2,32 +2,72 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
 import torch
-from train_number import NumberCNN
 import torchvision.transforms as transforms
+from PIL import Image
+from torchvision.models import resnet18
+from torchvision.models import ResNet18_Weights
 
+# Load ResNet-18 Model
+def load_resnet18():
+    model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+    model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)  # Adjust for grayscale
+    model.fc = torch.nn.Linear(model.fc.in_features, 10)  # Output layer for digits 0-9
+    return model
 
-# Load model weights
-model = NumberCNN()
-
-model.load_state_dict(torch.load("number_cnn.pth"))
+# Load trained ResNet-18 model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = load_resnet18().to(device)
+model.load_state_dict(torch.load("resnet_digits.pth", map_location=device))
 model.eval()
 
-# Define transformations
-transform = transforms.Compose([
-    transforms.Grayscale(num_output_channels=1),
-    transforms.Resize((28, 28)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,))
-])
+# Updated Preprocessing Function (Using CLAHE, Brightness Mask, and Green Mask)
+def preprocess_image(roi, brightness_threshold=120):
+    """Applies CLAHE for contrast enhancement, brightness filtering, and an improved green mask for digit extraction."""
+    
+    # Convert to grayscale
+    image_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
-from PIL import Image
+    # Extract the Green Channel
+    green_channel = roi[:, :, 1]
 
+    # Apply CLAHE to enhance contrast
+    clahe = cv2.createCLAHE(clipLimit=5.0, tileGridSize=(8, 8))
+    contrast_enhanced = clahe.apply(image_gray)
+    enhanced_green = clahe.apply(green_channel)
+
+    # Compute adaptive green intensity thresholds
+    green_min, green_max = np.percentile(enhanced_green, [5, 95])
+    green_mask = cv2.inRange(enhanced_green, green_min, green_max)
+
+    # Invert Green Mask so green areas appear white (255)
+    corrected_green_mask = cv2.bitwise_not(green_mask)
+
+    # Apply Morphological Closing on Green Mask
+    kernel = np.ones((3,3), np.uint8)
+    corrected_green_mask = cv2.morphologyEx(corrected_green_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    # Apply Brightness Filtering
+    bright_mask = (contrast_enhanced > brightness_threshold).astype(np.uint8) * 255
+
+    # Combine the Corrected Green Mask with Brightness Mask
+    final_mask = cv2.bitwise_and(bright_mask, corrected_green_mask)
+
+    # Resize for ResNet (224x224)
+    resized = cv2.resize(final_mask, (224, 224))
+
+    # Convert to PyTorch tensor with Augmentation
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize pixel values
+    ])
+
+    return transform(resized).unsqueeze(0).to(device)  # Add batch dimension and move to device
+
+# Function to detect number in ROI using ResNet-18
 def detect_number_in_roi(roi):
-    """Detects the number in the given region of interest (ROI) using the trained CNN model."""
-    roi_pil = Image.fromarray(cv2.cvtColor(roi, cv2.COLOR_BGR2RGB))  # Convert NumPy array to PIL image
-    roi_tensor = transform(roi_pil).unsqueeze(0)  # Apply transformations and add batch dimension
+    """Detects the number in the given region of interest (ROI) using the trained ResNet-18 model."""
+    roi_tensor = preprocess_image(roi)
     
     with torch.no_grad():
         output = model(roi_tensor)
@@ -35,10 +75,12 @@ def detect_number_in_roi(roi):
     
     return predicted_label
 
-
-def first_non_zero_speed(video_path, start_1, time_eye):
-    """ Detects first occurrence of speed values 1 or 2 in the video using YOLO and CNN."""
-    acceptable = {1}
+# Function to detect number in video
+def first_non_zero_speed(video_path, start_1, time_eye, confidence_threshold=0.8):
+    """Detects first occurrence of speed values in video using YOLO and ResNet-18 and visualizes detection."""
+    
+    acceptable = {1, 2, 3, 4, 5, 6, 7, 9}  # Target numbers
+    in_row_number = []
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error: Unable to open video file.")
@@ -60,41 +102,49 @@ def first_non_zero_speed(video_path, start_1, time_eye):
         if not ret:
             break
 
-        results = yolo_model(frame, show=False, save=False)
+        # YOLO detection
+        results = yolo_model(frame, conf=confidence_threshold)  # Filter by confidence
         timestamp = frame_idx * timestep
 
         for result in results:
             for box in result.boxes:
                 cls = box.cls[0]
-                if int(cls.item()) == 0:  # Ensure it's the correct class
+                conf = box.conf[0].item()  # Confidence score
+
+                if int(cls.item()) == 0 and conf >= confidence_threshold:  # Ensure correct class with confidence
                     xmin, ymin, xmax, ymax = map(int, box.xyxy[0].tolist())
                     roi = frame[ymin:ymax, xmin:xmax]
 
                     detected_number = detect_number_in_roi(roi)
 
-                    # Draw bounding box and label on frame
-                    #cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 0, 255), 2)
-                    #cv2.putText(frame, str(detected_number), (xmin, ymin - 10),
-                                #cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-                    #cv2.imshow("Detected Frame", frame)
-                    #key = cv2.waitKey(0)  # Wait for user to press a key before proceeding to the next frame
-                    #if key == 27:  # Press 'Esc' to exit early
+                    # Draw bounding box around detected AOI
+                    #cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
+
+                    # Overlay detected number and confidence score
+                    #label = f"Num: {detected_number}, Conf: {conf:.2f}"
+                    #cv2.putText(frame, label, (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+                    # Show the frame with AOI highlighted
+                    #cv2.imshow("Detection", frame)
+                    #if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to quit early
                     #    cap.release()
                     #    cv2.destroyAllWindows()
                     #    return None, None
-                    
-                    print("Detected Number:", detected_number)
-                    print("Timestamp:", timestamp)
-                    
+
+                    print(f"Detected Number: {detected_number} at {timestamp:.2f}s (Confidence: {conf:.2f})")
+
                     if detected_number in acceptable:
-                        print(f"Valid Detection: {detected_number} at {timestamp} seconds")
+                        in_row_number.append(detected_number)
+                    else:
+                        in_row_number = []
+                    if len(in_row_number) == 10:
+                        print(f"Valid Detection: {detected_number} at {timestamp:.2f} seconds")
                         event_time = time_eye + timedelta(seconds=timestamp)
                         diff = event_time - start_1
                         seconds_difference = diff.total_seconds()
                         cap.release()
                         cv2.destroyAllWindows()
                         return seconds_difference, timestamp
-                    break
 
         frame_idx += 1
 
