@@ -12,13 +12,13 @@ from torchvision.models import ResNet18_Weights
 def load_resnet18():
     model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
     model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)  # Adjust for grayscale
-    model.fc = torch.nn.Linear(model.fc.in_features, 10)  # Output layer for digits 0-9
+    model.fc = torch.nn.Linear(model.fc.in_features, 21)  # Output layer for digits 0-9
     return model
 
 # Load trained ResNet-18 model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = load_resnet18().to(device)
-model.load_state_dict(torch.load("resnet_digits.pth", map_location=device))
+model.load_state_dict(torch.load("resnet_digits_0_20.pth", map_location=device))
 model.eval()
 
 # Updated Preprocessing Function (Using CLAHE, Brightness Mask, and Green Mask)
@@ -118,26 +118,26 @@ def first_non_zero_speed(video_path, start_1, time_eye, confidence_threshold=0.8
                     detected_number = detect_number_in_roi(roi)
 
                     # Draw bounding box around detected AOI
-                    #cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
+                    cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
 
                     # Overlay detected number and confidence score
-                    #label = f"Num: {detected_number}, Conf: {conf:.2f}"
-                    #cv2.putText(frame, label, (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    label = f"Num: {detected_number}, Conf: {conf:.2f}"
+                    cv2.putText(frame, label, (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
                     # Show the frame with AOI highlighted
-                    #cv2.imshow("Detection", frame)
-                    #if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to quit early
-                    #    cap.release()
-                    #    cv2.destroyAllWindows()
-                    #    return None, None
+                    cv2.imshow("Detection", frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to quit early
+                        cap.release()
+                        cv2.destroyAllWindows()
+                        return None, None
 
                     print(f"Detected Number: {detected_number} at {timestamp:.2f}s (Confidence: {conf:.2f})")
 
                     if detected_number in acceptable:
                         in_row_number.append(detected_number)
-                    else:
+                    elif detected_number == 0:
                         in_row_number = []
-                    if len(in_row_number) == 10:
+                    if len(in_row_number) == 15:
                         print(f"Valid Detection: {detected_number} at {timestamp:.2f} seconds")
                         event_time = time_eye + timedelta(seconds=timestamp)
                         diff = event_time - start_1
