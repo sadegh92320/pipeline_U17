@@ -45,18 +45,13 @@ def save_frame_from_video(video_path, output_folder, timestamp, participant_nb, 
     # Release the video capture object
     cap.release()
 
-def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, lag, number = None):
+def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, number = None):
                  
     check = eye_data
     
-    if time_partition[2] == len(check):
-        lag2 = 0
-    else:
-        lag2 = lag
     
-    print("trimming")
     
-    trim_video(video_path, check.iloc[time_partition[1]]["timestamp"], check.iloc[time_partition[2] - 1]["timestamp"])
+    trim_video(video_path, time_partition[0], time_partition[1])
     out_video_path = "trimmed_video.mp4"
     save_frame_from_video("trimmed_video.mp4", "frame_check", 5, part_number, scene_nb)
 
