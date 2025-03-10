@@ -65,15 +65,19 @@ def preprocess_image(roi, brightness_threshold=120):
     return transform(resized).unsqueeze(0).to(device)  # Add batch dimension and move to device
 
 # Function to detect number in ROI using ResNet-18
+# Function to detect number in ROI using ResNet-18
 def detect_number_in_roi(roi):
     """Detects the number in the given region of interest (ROI) using the trained ResNet-18 model."""
     roi_tensor = preprocess_image(roi)
     
     with torch.no_grad():
         output = model(roi_tensor)
-        predicted_label = torch.argmax(output, dim=1).item()
+        probabilities = torch.nn.functional.softmax(output, dim=1)  # Convert to probabilities
+        predicted_label = torch.argmax(probabilities, dim=1).item()
+        confidence_score = probabilities[0, predicted_label].item()  # Extract confidence
     
-    return predicted_label
+    return predicted_label, confidence_score
+
 
 # Function to detect number in video
 def first_non_zero_speed(video_path, start_1, time_eye, confidence_threshold=0.8):
@@ -115,7 +119,7 @@ def first_non_zero_speed(video_path, start_1, time_eye, confidence_threshold=0.8
                     xmin, ymin, xmax, ymax = map(int, box.xyxy[0].tolist())
                     roi = frame[ymin:ymax, xmin:xmax]
 
-                    detected_number = detect_number_in_roi(roi)
+                    detected_number, confidence = detect_number_in_roi(roi)
 
                     # Draw bounding box around detected AOI
                     cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
@@ -132,19 +136,19 @@ def first_non_zero_speed(video_path, start_1, time_eye, confidence_threshold=0.8
                         return None, None
 
                     print(f"Detected Number: {detected_number} at {timestamp:.2f}s (Confidence: {conf:.2f})")
-
-                    if detected_number in acceptable:
-                        in_row_number.append(detected_number)
-                    elif detected_number == 0:
-                        in_row_number = []
-                    if len(in_row_number) == 15:
-                        print(f"Valid Detection: {detected_number} at {timestamp:.2f} seconds")
-                        event_time = time_eye + timedelta(seconds=timestamp)
-                        diff = event_time - start_1
-                        seconds_difference = diff.total_seconds()
-                        cap.release()
-                        cv2.destroyAllWindows()
-                        return seconds_difference, timestamp
+                    if confidence > 0.7:
+                        if detected_number in acceptable:
+                            in_row_number.append(detected_number)
+                        elif detected_number == 0:
+                            in_row_number = []
+                        if len(in_row_number) == 15:
+                            print(f"Valid Detection: {detected_number} at {timestamp:.2f} seconds")
+                            event_time = time_eye + timedelta(seconds=timestamp)
+                            diff = event_time - start_1
+                            seconds_difference = diff.total_seconds()
+                            cap.release()
+                            cv2.destroyAllWindows()
+                            return seconds_difference, timestamp
 
         frame_idx += 1
 
