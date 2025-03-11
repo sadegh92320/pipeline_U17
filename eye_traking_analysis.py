@@ -95,7 +95,7 @@ def fixation_AOI(eye_data, video_path, time_partition, part_number, scene_nb, nu
     }
 
     for frame_idx, frame_results in enumerate(results):
-        timestamp = (frame_idx * timestep) + check.iloc[time_partition[1]]["timestamp"]
+        timestamp = (frame_idx * timestep) + time_partition[0]
         
 
         for i in range(time,len(check)):
