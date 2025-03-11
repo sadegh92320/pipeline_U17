@@ -6,7 +6,7 @@ import os
 
 
 
-def saccade_amplitude(self, f):
+def saccade_amplitude(f):
         sacc = False
         point = 0
         distances = []
@@ -31,7 +31,7 @@ def saccade_amplitude(self, f):
        
         return avg
 
-def saccade_velocity(self, f):
+def saccade_velocity(f):
         sacc = False
         point = 0
         velocities = []
@@ -58,7 +58,7 @@ def saccade_velocity(self, f):
        
         return avg
 
-def duration_fixation(self, f):
+def duration_fixation(f):
         fix = False
         time = 0
         times = []
@@ -78,22 +78,24 @@ def duration_fixation(self, f):
 
 
 csv_file = "new_trim.csv"
-csv_filename = "result_gaze_data.cs"
+csv_filename = "result_gaze_data.csv"
 
-with open('eye.pkl', 'rb') as file:
-    data = pickle.load(file)
+
 
 df = pd.read_csv(csv_file)
 
 for index, row in df.iterrows():
+    if int(row["participant number"]) > 130:
+         break
     start = row["star video"]
     end = row["end video"]
-    num_fix = fixation_AOI(row["dataframe eye"], row["video_path"], [start, end], int(row["participant number"]), int(row["Scenario number"]))
+    df_eye = pd.read_pickle(row["dataframe eye"])
+    num_fix = fixation_AOI(df_eye, row["video_path"], [start, end], int(row["participant number"]), int(row["Scenario number"]))
                     
                    
-    amplitude = saccade_amplitude(row["dataframe eye"])
-    velocity = saccade_velocity(row["dataframe eye"])
-    duration = duration_fixation(row["dataframe eye"])
+    amplitude = saccade_amplitude(df_eye)
+    velocity = saccade_velocity(df_eye)
+    duration = duration_fixation(df_eye)
     new_row = pd.DataFrame([{
                             'Participant number': int(row["participant number"]),
                             'Scenario number': int(row["Scenario number"]),
