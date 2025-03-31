@@ -14,8 +14,9 @@ def convert(imu, gaze):
             for line in file:
                 # Skip empty lines or whitespace
                 if line.strip():
+                    
                     data.append(json.loads(line.strip()))
-        
+                   
         return data
 
     # Load the gaze data and IMU data

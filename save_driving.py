@@ -4,10 +4,15 @@ import traceback
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from get_position_driving_data import add_spawn
+
+path_drivingsim = "C:/Users/imucl/Documents/U17CC/data/DrivingSim"
 
 def get_participants(folder, participants_pkl="participants.pkl", scene_2_pkl="scene_2.pkl"):
     participants = []
     scene_2 = {}
+
+
 
     for filename in sorted(os.listdir(folder)):
         f = os.path.join(folder, filename)
@@ -20,6 +25,11 @@ def get_participants(folder, participants_pkl="participants.pkl", scene_2_pkl="s
         moving = filename.split("_")     
         part_number = moving[0]
         date = moving[2].replace(".csv", "")
+        day = moving[-3]
+        time = moving[-2]
+        
+        full_datetime = datetime.strptime(day + time, "%Y%m%d%H%M%S")
+        
         formatted_date = datetime.strptime(date, "%Y%m%d").strftime("%d-%m-%Y")
         
         try:
@@ -62,16 +72,21 @@ def get_participants(folder, participants_pkl="participants.pkl", scene_2_pkl="s
 
             file[' Throttle'] = pd.to_numeric(file[' Throttle'], errors='coerce').fillna(0)
             throttle_threshold = 0.08
-            consistency_check_window = 5
+            consistency_check_window = 19
 
             non_zero_indices = file[file[' Throttle'] != 0].index
-            non_zero_2 = file[file[' Throttle'] > 0.1].index
+            #non_zero_2 = file[file[' Throttle'] > 0.1].index
 
-            for idx in non_zero_2:
-                if idx + consistency_check_window - 1 < len(file):  # Ensure we don't exceed the data length
-                    if all(file[' Throttle'][idx:idx + consistency_check_window] > throttle_threshold):
-                        first_non_zero = idx
-                        break  
+            #for idx in non_zero_2:
+            #    if idx + consistency_check_window - 1 < len(file):  # Ensure we don't exceed the data length
+            #        if all(file[' Throttle'][idx:idx + consistency_check_window] > throttle_threshold):
+            #            first_non_zero = idx
+            #            break  0
+            print(part_number)
+            print(file[" SceneNr"][0])
+            file[" Velocity x"] = pd.to_numeric(file[" Velocity x"], errors="coerce")
+            first_non_zero = (file[file[' Velocity x'] > 0.1].index)[0]
+            
 
             try:
                 last_non_zero = non_zero_indices[-1]
@@ -87,7 +102,7 @@ def get_participants(folder, participants_pkl="participants.pkl", scene_2_pkl="s
                 trimmed_df = file.iloc[first_non_zero:last_non_zero].reset_index(drop=True)
 
             if not trimmed_df.empty:
-                participants.append((part_number, formatted_date, trimmed_df))
+                participants.append((part_number, formatted_date, trimmed_df, full_datetime))
 
         except Exception as e:
             traceback.print_exc()
@@ -105,3 +120,5 @@ def get_participants(folder, participants_pkl="participants.pkl", scene_2_pkl="s
     print(f"Pickle files saved: {participants_pkl}, {scene_2_pkl}")
 
     return participants
+
+get_participants(path_drivingsim)

@@ -5,7 +5,10 @@ import pytz
 from datetime import datetime
 from convert_gaze import convert
 
-def get_participants_gaze(eye_data, save_path="participants_eye.pkl"):
+path_etg = "C:/Users/imucl/Documents/U17CC/data/ETG"
+
+def get_participants_gaze(eye_data, save_path="participants_eye.pkl", save_passed = "passed_participant.pkl"):
+    passed = []
     participants_eye = []
     
     for root, dirs, files in os.walk(eye_data):
@@ -14,7 +17,9 @@ def get_participants_gaze(eye_data, save_path="participants_eye.pkl"):
                 continue
             
             try:
+
                 time1 = datetime.strptime(dir, "%Y%m%dT%H%M%SZ")
+                
                 
                 gmt = pytz.timezone("GMT")
                 uk_time = pytz.timezone("Europe/London")  # Automatically handles DST
@@ -37,10 +42,19 @@ def get_participants_gaze(eye_data, save_path="participants_eye.pkl"):
                 imu_path = os.path.join(root, dir, "imudata.gz")
                 gaze_path = os.path.join(root, dir, "gazedata.gz")
                 video = os.path.join(root, dir, "scenevideo.mp4")
+                if os.path.isfile(participant_path):
+                    with open(participant_path, 'r') as f:
+                        data = json.load(f)
+                        number = data['name']
+                print(number)
+               
 
                 try:
+                  
                     data_eye = convert(imu_path, gaze_path)
                 except Exception as e:
+                    part_nb = number.split("_")
+                    passed.append(part_nb[0])
                     print(f"Error processing {participant_path}: {e}")
                     continue
 
@@ -49,19 +63,24 @@ def get_participants_gaze(eye_data, save_path="participants_eye.pkl"):
                 if int(eye_tracker_data["timestamp"][0]) > 1:
                     eye_tracker_data["timestamp"] = eye_tracker_data["timestamp"] - eye_tracker_data["timestamp"][0]
 
-                if os.path.isfile(participant_path):
-                    with open(participant_path, 'r') as f:
-                        data = json.load(f)
-                        number = data['name']
+                
                 
                 participants_eye.append([number, data_eye, eye_tracker_data, time1, video])
             
             except Exception as e:
                 print(f"Skipping {dir} due to error: {e}")
     
-    
+    print(passed)
+    print(len(passed))
     with open(save_path, 'wb') as f:
         pickle.dump(participants_eye, f)
+
+    with open(save_passed, 'wb') as f:
+        pickle.dump(passed, f)
+        print("saved")
     
     print(f"Pickle file saved at: {save_path}")
     return participants_eye
+
+
+get_participants_gaze(path_etg)
